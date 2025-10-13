@@ -1,5 +1,7 @@
 # 12 RAG Pain Points and Proposed Solutions: Solving the Core Challenges of Retrieval-Augmented Generation: 
 
+<img width="1202" height="701" alt="Screenshot 2025-10-13 160602" src="https://github.com/user-attachments/assets/ff50035c-504f-49c3-8671-306498d55f92" />
+
 ## 🔍 **Overview**
 
 The article explores **12 key pain points (challenges)** in building **Retrieval-Augmented Generation (RAG)** systems and provides **practical solutions** to each.
@@ -251,5 +253,6 @@ The article emphasizes that **RAG is complex but solvable** — the key is to ta
 * Scale ingestion and model fallback strategies.
 
 ## Reference: 
+
 
 - **“12 RAG Pain Points and Proposed Solutions: Solving the Core Challenges of Retrieval-Augmented Generation” by Wenqi Glantz (Jan 30, 2024):** https://towardsdatascience.com/12-rag-pain-points-and-proposed-solutions-43709939a28c/
