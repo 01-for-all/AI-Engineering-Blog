@@ -1,258 +1,339 @@
-# 12 RAG Pain Points and Proposed Solutions: Solving the Core Challenges of Retrieval-Augmented Generation: 
+# 12 RAG Pain Points and How to Solve Them  
+*A Practical Guide for Building Robust Retrieval-Augmented Generation Systems*
 
 <img width="1202" height="701" alt="Screenshot 2025-10-13 160602" src="https://github.com/user-attachments/assets/ff50035c-504f-49c3-8671-306498d55f92" />
 
-## 🔍 **Overview**
+## Overview
 
-The article explores **12 key pain points (challenges)** in building **Retrieval-Augmented Generation (RAG)** systems and provides **practical solutions** to each.
-It draws inspiration from the paper *“Seven Failure Points When Engineering a Retrieval-Augmented Generation System”* by Barnett et al., then adds **five new pain points** the author commonly encounters in real-world RAG pipelines.
+Retrieval-Augmented Generation (RAG) is one of the most powerful architectures for enterprise-grade AI systems — combining **retrieval** and **generation** to deliver factual, context-aware outputs.
 
-RAG systems combine:
+However, real-world RAG systems often fail silently due to subtle design flaws in ingestion, retrieval, or prompting.
 
-* **Retrieval**: fetching relevant data from a knowledge base.
-* **Generation**: using a Large Language Model (LLM) to generate context-aware responses.
-
-When a RAG pipeline fails, it’s often due to problems in **data quality, retrieval, ranking, context assembly, or model behavior**.
-Each of the 12 pain points targets one of these areas.
+This guide walks you through **12 common RAG pain points**, explains **why they occur**, and provides **production-ready Python examples** using frameworks like **LangChain**, **LlamaIndex**, and **OpenAI API**.
 
 ---
 
-## 🧩 **Pain Point 1: Missing Content**
+## Setup Instructions
 
-**Problem:**
-The knowledge base doesn’t contain the needed information, causing the LLM to “hallucinate” — giving a confident but wrong answer.
+Clone this repository and install dependencies:
 
-**Solutions:**
+```bash
+git clone https://github.com/<your_username>/rag-painpoints-guide.git
+cd rag-painpoints-guide
+````
 
-1. **Clean your data**
+Create a virtual environment and install requirements:
 
-   * Remove irrelevant content, duplicates, HTML tags, etc.
-   * Fix typos and ensure consistency.
-   * “Garbage in, garbage out” — no RAG pipeline works well on bad data.
+```bash
+python -m venv venv
+source venv/bin/activate   # or .\venv\Scripts\activate (Windows)
+pip install -r requirements.txt
+```
 
-2. **Better prompting**
+**`requirements.txt`**
 
-   * Encourage honesty from the model (e.g., *“If you don’t know, say so”*).
-   * Prevents misleading or fabricated responses.
+```
+openai
+llama-index
+langchain
+cohere
+unstructured
+nemoguardrails
+```
 
----
+Set your environment variables:
 
-## 📊 **Pain Point 2: Missed Top Ranked Documents**
-
-**Problem:**
-The relevant documents exist in the knowledge base but don’t appear in the top retrieval results.
-
-**Solutions:**
-
-1. **Hyperparameter tuning**
-
-   * Adjust parameters like `chunk_size` and `similarity_top_k` to balance efficiency and accuracy.
-   * Example: use LlamaIndex’s `ParamTuner` to find optimal values.
-
-2. **Reranking**
-
-   * Retrieve more documents (e.g., top 10), then **rerank** them using a model like **Cohere Rerank**.
-   * Ensures the best matches are passed to the LLM.
+```bash
+export OPENAI_API_KEY="your_key"
+export COHERE_API_KEY="your_key"
+```
 
 ---
 
-## 🧠 **Pain Point 3: Not in Context (Consolidation Limitations)**
+## 📑 Table of Contents
 
-**Problem:**
-Even after good retrieval, relevant docs may be **excluded** when combining data for the final LLM context.
-
-**Solutions:**
-
-1. **Tweak retrieval strategies**
-
-   * Try advanced retrievals (hierarchical, auto-retrieval, knowledge graph-based, etc.) from LlamaIndex.
-
-2. **Finetune embeddings**
-
-   * Train embedding models (e.g., BAAI/bge-small-en) on your domain data for better semantic matches.
-
----
-
-## 📄 **Pain Point 4: Not Extracted**
-
-**Problem:**
-LLM gets the context but fails to extract the key information — often due to noisy or conflicting context.
-
-**Solutions:**
-
-1. **Clean your data** (again — always the first step)
-2. **Prompt Compression**
-
-   * Use **LongLLMLingua** to compress large contexts intelligently, retaining the most relevant parts.
-3. **LongContextReorder**
-
-   * Reorder retrieved documents so the most critical parts appear first or last (avoiding the “lost in the middle” effect).
+1. [Missing Content](#1-missing-content)
+2. [Missed Top Ranked Documents](#2-missed-top-ranked-documents)
+3. [Not in Context](#3-not-in-context)
+4. [Not Extracted](#4-not-extracted)
+5. [Wrong Format](#5-wrong-format)
+6. [Incorrect Specificity](#6-incorrect-specificity)
+7. [Incomplete Responses](#7-incomplete-responses)
+8. [Data Ingestion Scalability](#8-data-ingestion-scalability)
+9. [Structured Data QA](#9-structured-data-qa)
+10. [PDF to Markdown Conversion](#10-pdf-to-markdown-conversion)
+11. [Fallback Models](#11-fallback-models)
+12. [LLM Security](#12-llm-security)
 
 ---
 
-## ⚙️ **Pain Point 5: Wrong Format**
+## 1️⃣ Missing Content
 
 **Problem:**
-LLM output doesn’t follow the requested structure (e.g., JSON, table, list).
+Important data never makes it into the vector store — the model hallucinates due to incomplete ingestion.
 
-**Solutions:**
+**Fix:** Add defensive prompts and verify ingestion coverage.
 
-1. **Better prompting** — clearly specify and exemplify the desired format.
-2. **Output parsing** — integrate **Guardrails** or **LangChain Output Parsers** within LlamaIndex.
-3. **Pydantic Programs** — define structured output schemas (e.g., via OpenAI Pydantic Programs).
-4. **OpenAI JSON Mode** — enforce valid JSON output (`response_format = { "type": "json_object" }`).
+```python
+system_prompt = """
+You are an AI assistant that answers only from provided context.
+If information is missing, respond with:
+'I don’t have enough information to answer that.'
+"""
+```
 
----
+**Tip:** Ensure all critical sources are parsed before generating embeddings. Use tools like `unstructured.io`.
 
-## 🧩 **Pain Point 6: Incorrect Specificity**
+
+## 2️⃣ Missed Top Ranked Documents
 
 **Problem:**
-Responses are too general or vague; the system misses detailed or granular answers.
+Retriever fails to surface relevant chunks due to bad `top_k` or embedding mismatch.
+
+**Fix:** Tune retriever parameters or rerank with semantic models.
+
+```python
+from llama_index import ParamTuner, objective_function_semantic_similarity
+
+param_dict = {"chunk_size": [256, 512, 1024], "top_k": [3, 5, 10]}
+results = ParamTuner(param_fn=objective_function_semantic_similarity, param_dict=param_dict).tune()
+print(results)
+```
+
+Add a reranker (Cohere):
+
+```python
+from llama_index.postprocessor.cohere_rerank import CohereRerank
+
+reranker = CohereRerank(api_key="COHERE_API_KEY", top_n=2)
+query_engine = index.as_query_engine(similarity_top_k=10, node_postprocessors=[reranker])
+```
+
+**Takeaway:** Tune retrieval before touching the LLM.
+
+## 3️⃣ Not in Context
+
+**Problem:**
+Right docs are retrieved but dropped due to token limits.
+
+**Fix:** Use finetuned embeddings and hierarchical retrieval.
+
+```python
+from llama_index.embeddings.finetune import SentenceTransformersFinetuneEngine
+
+engine = SentenceTransformersFinetuneEngine(
+    train_dataset="qa_pairs.jsonl",
+    model_id="BAAI/bge-small-en"
+)
+engine.finetune()
+embed_model = engine.get_finetuned_model()
+```
+
+```python
+from llama_index.retrievers import AutoMergingRetriever
+retriever = AutoMergingRetriever(index, similarity_top_k=8)
+response = retriever.retrieve("Explain OpenAI’s safety practices")
+```
+
+## 4️⃣ Not Extracted
+
+**Problem:**
+Long context overwhelms the LLM.
+
+**Fix:** Compress and reorder dynamically.
+
+```python
+from llama_index.postprocessor.longllmlingua import LongLLMLinguaPostprocessor
+from llama_index.core.postprocessor import LongContextReorder
+
+compressor = LongLLMLinguaPostprocessor(target_token=400)
+reorder = LongContextReorder()
+query_engine = index.as_query_engine(node_postprocessors=[compressor, reorder])
+```
+
+## 5️⃣ Wrong Format
+
+**Problem:**
+Outputs are unstructured or inconsistent.
+
+**Fix:** Use structured parsers or enforce JSON output.
+
+```python
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+
+schemas = [
+    ResponseSchema(name="education", description="Author education"),
+    ResponseSchema(name="work_experience", description="Career history")
+]
+parser = StructuredOutputParser.from_response_schemas(schemas)
+```
+
+**JSON Mode:**
+
+```python
+import openai
+
+response = openai.ChatCompletion.create(
+    model="gpt-4-turbo",
+    messages=[
+        {"role": "system", "content": "Extract employee details as JSON"},
+        {"role": "user", "content": "John Doe, Data Scientist, 5 years experience"}
+    ],
+    response_format={"type": "json_object"}
+)
+print(response["choices"][0]["message"]["content"])
+```
+
+## 6️⃣ Incorrect Specificity
+
+**Problem:**
+LLM returns vague or generic answers.
+
+**Fix:** Retrieve smaller text windows.
+
+```python
+from llama_index.retrievers import SentenceWindowRetriever
+
+retriever = SentenceWindowRetriever(index=index, window_size=2)
+response = retriever.retrieve("What specific changes were made to OpenAI’s board?")
+```
+
+## 7️⃣ Incomplete Responses
+
+**Problem:**
+Model returns partial answers despite available data.
+
+**Fix:** Use HyDE (Hypothetical Document Embeddings).
+
+```python
+from llama_index.query_engine import TransformQueryEngine
+from llama_index.query_transform import HyDEQueryTransform
+
+hyde = HyDEQueryTransform(include_original=True)
+query_engine = TransformQueryEngine(index.as_query_engine(), query_transform=hyde)
+```
+
+## 8️⃣ Data Ingestion Scalability
+
+**Problem:**
+Slow ingestion of large PDFs or text corpora.
+
+**Fix:** Use parallel ingestion pipelines.
+
+```python
+from llama_index import IngestionPipeline
+from llama_index.node_parser import SentenceSplitter
+
+pipeline = IngestionPipeline(transformations=[SentenceSplitter(chunk_size=1024)])
+nodes = pipeline.run(documents=docs, num_workers=8)
+print(f"Indexed {len(nodes)} chunks.")
+```
+
+## 9️⃣ Structured Data QA
+
+**Problem:**
+Natural queries on tabular data fail with vector search.
+
+**Fix:** Hybrid Text + SQL Query Engine.
+
+```python
+from llama_index.query_engine import NLSQLTableQueryEngine
+
+query_engine = NLSQLTableQueryEngine(sql_engine, tables=["financials"])
+response = query_engine.query("What was total revenue for 2024 Q2?")
+print(response)
+```
+
+## 🔟 PDF → Markdown Conversion
+
+**Problem:**
+Complex PDFs (tables, lists, headings) are hard to parse for RAG ingestion.
 
 **Solution:**
-Use **advanced retrieval strategies** such as:
+Convert PDFs into **Markdown** format, preserving structure for better vector embeddings.
 
-* **Small-to-big retrieval**
-* **Sentence window retrieval**
-* **Recursive retrieval**
+```python
+# pip install unstructured
 
-These techniques refine context granularity so responses match the question’s specificity.
+from unstructured.partition.pdf import partition_pdf
 
----
+pdf_file = "example.pdf"
+elements = partition_pdf(filename=pdf_file)
 
-## 🧾 **Pain Point 7: Incomplete**
+markdown_text = "\n\n".join([el.get_text() for el in elements])
 
-**Problem:**
-LLM provides partial answers — not wrong, but missing parts even though information exists.
+with open("example.md", "w", encoding="utf-8") as f:
+    f.write(markdown_text)
 
-**Solutions:**
+print(" PDF converted to Markdown successfully!")
+```
 
-1. **Query Transformations**
+**Ingest Markdown into RAG pipeline:**
 
-   * Preprocess or decompose the user query before retrieval:
+```python
+from llama_index import SimpleDirectoryReader, VectorStoreIndex
 
-     * **Routing** – send query to the right data source/tool.
-     * **Query Rewriting** – generate multiple versions of the query.
-     * **Sub-Questions** – break into smaller queries.
-     * **ReAct Agent Selection** – let an agent decide which tool to use.
-   * Example: **HyDE (Hypothetical Document Embeddings)** generates a fake answer first to improve retrieval accuracy.
+documents = SimpleDirectoryReader("example.md").load_data()
+index = VectorStoreIndex.from_documents(documents)
+```
 
----
+**Tip:** Use **PDF → Markdown → Chunked Ingestion** for better retrieval quality.
 
-## 🚀 **Pain Point 8: Data Ingestion Scalability**
-
-**Problem:**
-The ingestion pipeline can’t handle large datasets efficiently.
-
-**Solution:**
-
-* **Parallelize ingestion**
-
-  * LlamaIndex’s `IngestionPipeline` supports parallel processing with `num_workers > 1`.
-  * Up to **15× faster** ingestion.
-
----
-
-## 📈 **Pain Point 9: Structured Data QA**
+## 1️⃣1️⃣ Fallback Models
 
 **Problem:**
-Difficulty answering questions over structured data (tables, SQL) due to LLM limits in reasoning or query parsing.
+Primary model (e.g., GPT-4) times out or hits rate limits.
 
-**Solutions:**
+**Fix:** Add fallback logic.
 
-1. **Chain-of-Table Pack**
+```python
+def safe_llm_call(prompt):
+    try:
+        return openai_api(prompt)
+    except Exception:
+        return claude_api(prompt)
+```
 
-   * Based on the *chain-of-table* method; step-by-step transformations over tables for complex QA.
-
-2. **Mix-Self-Consistency Pack**
-
-   * Combines textual and symbolic reasoning (SQL/Python) and uses **majority voting** for accurate results.
-
----
-
-## 📚 **Pain Point 10: Data Extraction from Complex PDFs**
+## 1️⃣2️⃣ LLM Security
 
 **Problem:**
-Retrieving data from embedded tables or non-text sections in PDFs.
+Prompt injection or unsafe generations.
 
-**Solution:**
+**Fix 1 — NeMo Guardrails:**
 
-* **Embedded Table Retriever**
+```python
+from nemoguardrails import LLMRails, RailsConfig
 
-  * Use **EmbeddedTablesUnstructuredRetrieverPack** from LlamaIndex.
-  * Converts PDFs → HTML (via `pdf2htmlEX`), extracts tables with **Unstructured.io**, and indexes them for QA.
+config = RailsConfig.from_path("./config")
+rails = LLMRails(config)
+response = rails.generate(messages=[{"role": "user", "content": "How do I hack my system?"}])
+```
 
----
+**Fix 2 — Llama Guard:**
 
-## 🔁 **Pain Point 11: Fallback Models**
+```python
+from llama_index.packs.llamaguard_moderator import LlamaGuardModeratorPack
 
-**Problem:**
-Primary LLM may fail (rate limits, downtime, etc.) — need redundancy.
+moderator = LlamaGuardModeratorPack("llamaguard_pack")
+response = moderator.run("Summarize OpenAI safety protocols.")
+```
 
-**Solutions:**
+## Final Thoughts
 
-1. **Neutrino Router**
+Building a reliable RAG pipeline means thinking beyond LLM performance:
 
-   * Routes queries intelligently to the best LLM among many (OpenAI, Anthropic, etc.) based on cost and latency.
-2. **OpenRouter**
+* **Data coverage**
+* **Embedding optimization**
+* **Retrieval accuracy**
+* **Response formatting**
+* **Security layers**
 
-   * Unified API across multiple providers; auto-selects cheapest or available models and provides fallback handling.
+> “Good RAG is invisible — it just works.”
 
----
+## References
 
-## 🛡️ **Pain Point 12: LLM Security**
+* [12 RAG Pain Points and Proposed Solutions — Wenqi Glantz (Towards Data Science)](https://towardsdatascience.com/12-rag-pain-points-and-proposed-solutions-43709939a28c)
+* [LangChain Documentation](https://python.langchain.com/)
+* [LlamaIndex Documentation](https://docs.llamaindex.ai/)
+* [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
 
-**Problem:**
-Risks like prompt injection, unsafe outputs, or data leakage.
-
-**Solutions:**
-
-1. **NeMo Guardrails**
-
-   * Define *rails* (rules) for:
-
-     * Input (filter/modify)
-     * Output (block/modify)
-     * Dialog, retrieval, and execution steps.
-   * Acts as a programmable security layer for LLM interactions.
-
-2. **Llama Guard**
-
-   * Meta’s open-source classifier (based on Llama 2 7B).
-   * Flags unsafe prompts or outputs.
-   * Available as **LlamaGuardModeratorPack** in LlamaIndex for easy moderation.
-
----
-
-## 🧱 **Summary Table (Conceptually)**
-
-| #  | Pain Point                 | Core Issue             | Key Solution(s)                        |
-| -- | -------------------------- | ---------------------- | -------------------------------------- |
-| 1  | Missing Content            | KB lacks info          | Clean data, better prompts             |
-| 2  | Missed Top Docs            | Bad ranking            | Hyperparameter tuning, reranking       |
-| 3  | Not in Context             | Lost after retrieval   | Retrieval tweaks, finetuned embeddings |
-| 4  | Not Extracted              | Context overload       | Clean data, compression, reorder       |
-| 5  | Wrong Format               | Unstructured output    | Prompting, parsers, JSON/Pydantic      |
-| 6  | Incorrect Specificity      | Too generic            | Advanced retrievals                    |
-| 7  | Incomplete                 | Partial answer         | Query transformations                  |
-| 8  | Data Ingestion Scalability | Slow ingestion         | Parallel processing                    |
-| 9  | Structured Data QA         | Complex table queries  | Chain-of-Table, Mix-Self-Consistency   |
-| 10 | Complex PDFs               | Embedded tables        | Embedded Table Retriever               |
-| 11 | Fallback Models            | Model failure          | Neutrino Router, OpenRouter            |
-| 12 | LLM Security               | Unsafe prompts/outputs | NeMo Guardrails, Llama Guard           |
-
----
-
-## 🧭 **Conclusion**
-
-The article emphasizes that **RAG is complex but solvable** — the key is to tackle each challenge systematically:
-
-* Start with **clean, well-chunked data**.
-* Use **advanced retrieval and reranking**.
-* Apply **robust formatting and safety layers**.
-* Scale ingestion and model fallback strategies.
-
-## Reference: 
-
-
-- **“12 RAG Pain Points and Proposed Solutions: Solving the Core Challenges of Retrieval-Augmented Generation” by Wenqi Glantz (Jan 30, 2024):** https://towardsdatascience.com/12-rag-pain-points-and-proposed-solutions-43709939a28c/
